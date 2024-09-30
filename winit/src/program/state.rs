@@ -142,6 +142,7 @@ where
         event: &WindowEvent,
         _debug: &mut crate::runtime::Debug,
     ) {
+        tracing::info!("window event {event:#?}");
         match event {
             WindowEvent::Resized(new_size) => {
                 let size = Size::new(new_size.width, new_size.height);
@@ -191,6 +192,44 @@ where
                     },
                 ..
             } => _debug.toggle(),
+
+            // Since winit doesn't support WindowEvent::ModifiersChanged on wasm,
+            // we can synthesize the ModifiersState using KeyboardInput events.
+            #[cfg(target_arch = "wasm32")]
+            WindowEvent::KeyboardInput {
+                event:
+                    winit::event::KeyEvent {
+                        logical_key, state, ..
+                    },
+                ..
+            } => {
+                let modifier_state = match logical_key {
+                    winit::keyboard::Key::Named(
+                        winit::keyboard::NamedKey::Control,
+                    ) => Some(ModifiersState::CONTROL),
+                    winit::keyboard::Key::Named(
+                        winit::keyboard::NamedKey::Super,
+                    ) => Some(ModifiersState::SUPER),
+                    winit::keyboard::Key::Named(
+                        winit::keyboard::NamedKey::Shift,
+                    ) => Some(ModifiersState::SHIFT),
+                    winit::keyboard::Key::Named(
+                        winit::keyboard::NamedKey::Alt,
+                    ) => Some(ModifiersState::ALT),
+                    _ => None,
+                };
+
+                if let Some(modifier_state) = modifier_state {
+                    match state {
+                        winit::event::ElementState::Pressed => {
+                            self.modifiers |= modifier_state;
+                        }
+                        winit::event::ElementState::Released => {
+                            self.modifiers &= !modifier_state;
+                        }
+                    };
+                }
+            }
             _ => {}
         }
     }
